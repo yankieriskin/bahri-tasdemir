@@ -7,7 +7,9 @@
   var masaj = ["Masaj", [["El Ayak Masajı", ""], ["Klasik Masaj", ""], ["Bölgesel Masaj", ""]]];
 
   // Luxury Saloon personeli
-  var A = "Ayşe Taşdemir", D = "Dilara Fenkli", O = "Oğuz Arınık", S = "Sefer Deliler", Y = "Yasemin Taşdemir";
+  var A = "Ayşe Taşdemir", B = "Bahri Taşdemir", D = "Dilara Fenkli", E = "Eren Sargın", F = "Furkan Tekir",
+      O = "Oğuz Arınık", S = "Sefer Deliler", T = "Taha Çavdar", Y = "Yasemin Taşdemir";
+  var ERKEK_SAC = [B, E, F, T]; // erkek saç ve sakal işleri
 
   window.BT = {
     instagram: "https://www.instagram.com/bahritasdemirbarbersclub/",
@@ -45,20 +47,32 @@
         tel: "tel:08503037285",
         address: "İstasyon Mahallesi 1440. Sokak Emlak Konut Bizim Mahalles 1. Etap 2. Kısım Konutları 11/F-E Blok No: 69 Küçükçekmece İstanbul",
         closedDay: 1, // 1 = Pazartesi
-        staff: [A, D, O, S, Y],
-        // Hangi hizmeti kim yapıyor. Listede olmayan hizmetlerde müşteri personel seçemez, salon planlar.
+        staff: [A, B, D, E, F, O, S, T, Y],
+        // Hangi hizmeti kim yapıyor (Kolay Randevu'daki personel seçimiyle aynı, 16.11.2026).
+        // Listede olmayan hizmetlerde müşteri personel seçemez, salon planlar.
         staffBy: {
           kadin: {
-            "Nail Art": [A],
-            "Manikür": [A, D], "Pedikür": [A, D], "Ağda (Bölgesel)": [A, D], "Topuk Törpüsü": [A, D],
+            "Nail Art": [A], "Protez Tırnak Çıkartma": [A], "Medikal Manikür (kuru)": [A], "Protez Çıkarma + Manikür": [A], "Bakım Manikürü": [A], "Pedikür (kuru pedikür + kalıcı oje)": [A], "Jel Güçlendirme": [A], "Protez Tırnak": [A],
+            "Manikür": [A, D], "Pedikür": [A, D], "Ağda (Bölgesel)": [A, D], "Ağda (Tüm Vücut)": [A, D], "Topuk Törpüsü": [A, D], "Kalıcı Oje Çıkarma": [A, D], "Kalıcı Oje El": [A, D], "Kalıcı Oje Ayak": [A, D], "Batık Tırnak": [A, D], "Oje Uygulama": [A, D], "Pedikür (ıslak)": [A, D],
             "Kaş Alma": [A, D, Y], "Dudak Üstü": [A, D, Y],
+            "Cilt Bakımı": [A, Y], "El Ayak Masajı": [A, Y], "Klasik Masaj": [A, Y], "Bölgesel Masaj": [A, Y],
+            "Kaş Boyama": [D], "Altın Oran Kaş Tasarımı": [D],
+            "Haftalık Kirpik": [D, Y], "Gündelik Makyaj": [D, Y], "Gece Makyajı": [D, Y], "Gelin Makyajı": [D, Y], "Profesyonel Makyaj": [D, Y], "Örgü": [D, Y],
             "Fön": [D, O, S], "Topuz": [D, O, S], "Gelin Başı": [D, O, S], "Saç Dip Boyama": [D, O, S], "Keratin Bakım": [D, O, S], "Komple Boya": [D, O, S], "Saç Renk Değişimi": [D, O, S], "Perma": [D, O, S], "Sombre": [D, O, S], "Ombre": [D, O, S], "Röfle ve Gölge": [D, O, S], "Saç Kaynağı": [D, O, S],
             "Maşa": [D, O, S, Y], "Nişan Saçı": [D, O, S, Y],
-            "Profesyonel Makyaj": [D, Y], "Örgü": [D, Y],
             "Saç Kesimi": [O, S], "Saç Bakımı": [O, S], "Kırık Fön": [O, S], "Brezilya Fönü": [O, S], "Saç Açma Boyama": [O, S],
             "Saç Yıkama": [Y]
+            // "Saç Boyama": Kolay Randevu'da da personel seçimi yok, salon planlıyor.
           },
-          erkek: {}
+          erkek: {
+            "Saç Kesimi": ERKEK_SAC, "Saç Bakımı": ERKEK_SAC, "Saç Boyama": ERKEK_SAC, "Sakal Tıraşı": ERKEK_SAC, "Çocuk Tıraşı": ERKEK_SAC, "Saç Sakal Kesimi": ERKEK_SAC, "Keratin Bakım": ERKEK_SAC, "Brezilya Fönü": ERKEK_SAC, "Gölgelendirme Gri": ERKEK_SAC, "Renklendirme (Açma Boyama)": ERKEK_SAC, "Damat Tıraşı": ERKEK_SAC, "Kollajen Bakımı": ERKEK_SAC,
+            "Fön": [B, D, E, F, T],
+            "Perma": [E, F, T],
+            "Manikür": [A, D], "Pedikür": [A, D], "Topuk Törpüsü": [A, D], "Batık Tırnak": [A, D], "Pedikür (ıslak)": [A, D],
+            "Kaş Alma": [A, D, Y],
+            "Cilt Bakımı": [A, Y], "El Ayak Masajı": [A, Y], "Klasik Masaj": [A, Y], "Bölgesel Masaj": [A, Y],
+            "Bakım Manikürü": [A]
+          }
         },
         genders: [{
           key: "kadin",
