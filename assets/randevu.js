@@ -334,7 +334,10 @@
 
   // İlk çizim
   applyTheme();
-  $("back").href = b.page;
+  // Geri oku: şube sayfasından gelindiyse oraya, ana sayfadan gelindiyse ana sayfaya döner.
+  var fromBranch = (document.referrer || "").indexOf("/" + b.page) >= 0;
+  $("back").href = fromBranch ? b.page : "index.html";
+  $("back").setAttribute("aria-label", fromBranch ? "Şube sayfasına dön" : "Ana sayfaya dön");
   $("branch-name").textContent = b.title.toLocaleUpperCase("tr");
   $("foot-note").textContent = "Fiyatlar bilgi amaçlıdır. Değişiklik için " + b.phone;
   if (Store.mode === "demo") $("demo").hidden = false;
