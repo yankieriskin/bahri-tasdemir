@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=Jost:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/site.css?v=2">
+<link rel="stylesheet" href="assets/site.css?v=3">
 </head>
 <body>
 <div class="page">
@@ -67,12 +67,31 @@
         <div class="step-head"><span class="n">05</span><h2>BİLGİLERİNİZ</h2></div>
         <div class="fields">
           <div class="field">
-            <label for="ad">AD SOYAD</label>
-            <input id="ad" type="text" autocomplete="name" maxlength="60">
-          </div>
-          <div class="field">
             <label for="tel">CEP TELEFONU</label>
-            <input id="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="20">
+            <input id="tel" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="05XX XXX XX XX" aria-describedby="tel-note">
+          </div>
+          <p class="hint" id="tel-note">Daha önce randevu aldıysanız yalnızca telefon numaranızı yazmanız yeterli.</p>
+          <p class="note ok" id="known" role="status" hidden>Bu numara kayıtlı. Bilgilerinizi yeniden yazmanıza gerek yok.</p>
+          <!-- Numara kayıtlı değilse (ilk randevu) açılır -->
+          <div class="signup" id="signup" hidden>
+            <p class="hint">İlk randevunuz için kısa bir kayıt gerekiyor. Sonraki randevularınızda yalnızca telefon numaranızı yazacaksınız.</p>
+            <div class="field">
+              <label for="ad">AD SOYAD</label>
+              <input id="ad" type="text" autocomplete="name" maxlength="60">
+            </div>
+            <div class="pair">
+              <div class="field">
+                <label for="yas">YAŞ</label>
+                <input id="yas" type="text" inputmode="numeric" autocomplete="off" maxlength="3">
+              </div>
+              <div class="field">
+                <span class="lab" id="cins-lab">CİNSİYET</span>
+                <div class="seg" id="cins" role="group" aria-labelledby="cins-lab">
+                  <button type="button" data-x="K" aria-pressed="false">KADIN</button>
+                  <button type="button" data-x="E" aria-pressed="false">ERKEK</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -99,10 +118,10 @@
   </main>
 
 </div>
-<script src="assets/data.js?v=2"></script>
-<script src="assets/app.js?v=2"></script>
+<script src="assets/data.js?v=3"></script>
+<script src="assets/app.js?v=3"></script>
 <script src="assets/config.js"></script>
-<script src="assets/store.js?v=2"></script>
-<script src="assets/randevu.js?v=2"></script>
+<script src="assets/store.js?v=3"></script>
+<script src="assets/randevu.js?v=3"></script>
 </body>
 </html>

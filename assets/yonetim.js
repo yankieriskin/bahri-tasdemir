@@ -1,8 +1,10 @@
-/* Yönetim paneli: giriş, randevu listesi, usta usta görünüm, süzme ve durum değiştirme.
+/* Yönetim paneli: giriş, randevu listesi, usta usta görünüm, müşteri kayıtları, süzme ve durum değiştirme.
    Adresin sonu hangi görünümün açılacağını belirler:
      yonetim.html                              -> tüm randevular
      yonetim.html#ustalar                      -> usta listesi
      yonetim.html#usta/club/Bilal%20Karadeniz  -> o ustanın randevuları
+     yonetim.html#musteriler                   -> müşteri listesi
+     yonetim.html#musteri/5321234567           -> o müşterinin bilgileri ve randevuları
    Her usta kendi adresini telefonuna kısayol olarak kaydedebilir. */
 (function () {
   "use strict";
@@ -11,16 +13,26 @@
   var ANY = "Fark Etmez";
   var VIEWS = [["bugun", "BUGÜN"], ["yarin", "YARIN"], ["yaklasan", "YAKLAŞAN"], ["gecmis", "GEÇMİŞ"], ["tum", "TÜMÜ"]];
   var STATUS = { yeni: "BEKLİYOR", tamam: "TAMAMLANDI", iptal: "İPTAL" };
+  var TITLES = { all: "Randevular", staff: "Ustalar", cust: "Müşteriler" };
+  var PAST_DAYS = 120;
   var CHEVRON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
   var BACK = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
 
-  // mode: "all" tüm randevular, "staff" ustalar. person: seçili usta {branch, name}; seçili değilse null.
-  var state = { mode: "all", person: null, branch: "all", view: "yaklasan", q: "", list: [] };
+  /* mode: "all" tüm randevular, "staff" ustalar, "cust" müşteriler.
+     person: seçili usta {branch, name}; cust: seçili müşterinin numarası.
+     list: yüklü randevular (from tarihinden sonrası). custs: numara -> müşteri kaydı (silinmişse null).
+     custAll: müşterilerin tamamı yüklendi mi. custAppts: seçili müşterinin randevuları (custFor numarası için). */
+  var state = {
+    mode: "all", person: null, cust: "", branch: "all", view: "yaklasan", q: "", cq: "",
+    list: [], from: "", listAt: 0, custs: {}, custAll: false, custAppts: [], custFor: "", busy: false
+  };
 
   function $(i) { return document.getElementById(i); }
   function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   function lower(s) { return String(s || "").toLocaleLowerCase("tr"); }
   function digitsOf(s) { return String(s || "").replace(/\D/g, ""); }
+  // Aramada yazılan numara: kayıtlar baştaki 0 olmadan saklandığı için o atılır.
+  function digitsQuery(s) { var d = digitsOf(s); return d.charAt(0) === "0" ? d.slice(1) : d; }
 
   function dayKey(offset) {
     var n = new Date();
@@ -34,6 +46,7 @@
     var p = window.location.hash.replace(/^#/, "").split("/");
     state.mode = "all";
     state.person = null;
+    state.cust = "";
     if (p[0] === "ustalar") {
       state.mode = "staff";
     } else if (p[0] === "usta") {
@@ -43,14 +56,49 @@
       if (has(BT.branches, p[1]) && (name === ANY || BT.branches[p[1]].staff.indexOf(name) >= 0)) {
         state.person = { branch: p[1], name: name };
       }
+    } else if (p[0] === "musteriler") {
+      state.mode = "cust";
+    } else if (p[0] === "musteri") {
+      state.mode = "cust";
+      if (/^\d{10,15}$/.test(p[1] || "")) state.cust = p[1];
     }
   }
 
   function staffLabel(name) { return name === ANY ? "Personel atanmamış" : name; }
 
   function initials(name) {
-    if (name === ANY) return "?";
-    return name.split(" ").slice(0, 2).map(function (p) { return p.charAt(0); }).join("");
+    if (!name || name === ANY) return "?";
+    return String(name).split(" ").filter(Boolean).slice(0, 2).map(function (p) { return p.charAt(0); }).join("").toLocaleUpperCase("tr");
+  }
+
+  /* ---- Müşteri bilgileri ---- */
+  function custOf(phone) { return has(state.custs, phone) ? state.custs[phone] : undefined; }
+
+  // Randevuda ad tutulmaz; ad, müşteri kaydından gelir.
+  function nameOf(a) {
+    var c = custOf(a.phone);
+    if (c) return c.name;
+    return c === null ? "Kaydı silinmiş müşteri" : "…";
+  }
+
+  function genderText(g) { return g === "K" ? "Kadın" : (g === "E" ? "Erkek" : ""); }
+
+  // Yaş kayıt sırasında yazılır; aradan geçen yıllar eklenir.
+  function ageNow(c) {
+    if (typeof c.age !== "number") return "";
+    var years = 0;
+    if (c.created) {
+      var d = new Date(c.created), n = new Date();
+      years = n.getFullYear() - d.getFullYear();
+      if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) years--;
+    }
+    return c.age + Math.max(0, years);
+  }
+
+  function shortDate(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? "" : d.getDate() + " " + A.MONTHS[d.getMonth()] + " " + d.getFullYear();
   }
 
   // Seçili ustanın, yoksa seçili şubenin randevuları
@@ -59,10 +107,15 @@
     return state.branch === "all" || a.branch === state.branch;
   }
 
+  function byTime(a, b) {
+    var k1 = a.date + " " + a.time, k2 = b.date + " " + b.time;
+    return k1 < k2 ? -1 : (k1 > k2 ? 1 : 0);
+  }
+
   function filtered() {
     var t = dayKey(0), y = dayKey(1);
     var text = state.person ? "" : state.q;
-    var q = lower(text).trim(), qd = digitsOf(text);
+    var q = lower(text).trim(), qd = digitsQuery(text);
     return state.list.filter(function (a) {
       if (!inScope(a)) return false;
       if (state.view === "bugun" && a.date !== t) return false;
@@ -70,11 +123,9 @@
       if (state.view === "yaklasan" && a.date < t) return false;
       if (state.view === "gecmis" && a.date >= t) return false;
       if (!q) return true;
-      return lower(a.name).indexOf(q) >= 0 || (qd.length > 0 && digitsOf(a.phone).indexOf(qd) >= 0);
+      return lower(nameOf(a)).indexOf(q) >= 0 || (qd.length > 0 && String(a.phone).indexOf(qd) >= 0);
     }).sort(function (a, b) {
-      var k1 = a.date + " " + a.time, k2 = b.date + " " + b.time;
-      var c = k1 < k2 ? -1 : (k1 > k2 ? 1 : 0);
-      return state.view === "gecmis" ? -c : c;
+      return state.view === "gecmis" ? -byTime(a, b) : byTime(a, b);
     });
   }
 
@@ -82,17 +133,27 @@
     Array.prototype.forEach.call($("modes").querySelectorAll("button"), function (b) {
       b.setAttribute("aria-pressed", String(b.getAttribute("data-m") === state.mode));
     });
+    $("title").textContent = TITLES[state.mode];
+  }
+
+  function headHtml(backHref, backText, avatar, kicker, title) {
+    return '<a class="backlink" href="' + backHref + '">' + BACK + backText + "</a>" +
+      '<div class="ph"><span class="av" aria-hidden="true">' + A.esc(avatar) + "</span>" +
+      '<div class="t"><div class="eyebrow">' + A.esc(kicker) + "</div>" +
+      "<h2>" + A.esc(title) + "</h2></div></div>";
   }
 
   function renderHead() {
     var box = $("who-head");
-    if (!state.person) { box.innerHTML = ""; return; }
-    var br = BT.branches[state.person.branch], n = state.person.name;
-    box.innerHTML =
-      '<a class="backlink" href="#ustalar">' + BACK + "TÜM USTALAR</a>" +
-      '<div class="ph"><span class="av" aria-hidden="true">' + A.esc(initials(n)) + "</span>" +
-      '<div class="t"><div class="eyebrow">' + A.esc(br.title.toLocaleUpperCase("tr")) + "</div>" +
-      "<h2>" + A.esc(staffLabel(n)) + "</h2></div></div>";
+    if (state.person) {
+      var br = BT.branches[state.person.branch], n = state.person.name;
+      box.innerHTML = headHtml("#ustalar", "TÜM USTALAR", initials(n), br.title.toLocaleUpperCase("tr"), staffLabel(n));
+    } else if (state.cust) {
+      var c = custOf(state.cust);
+      box.innerHTML = headHtml("#musteriler", "TÜM MÜŞTERİLER", c ? initials(c.name) : "?", "MÜŞTERİ", c ? c.name : A.phoneText(state.cust));
+    } else {
+      box.innerHTML = "";
+    }
   }
 
   function renderTiles() {
@@ -119,6 +180,10 @@
     $("views").innerHTML = VIEWS.map(function (v) {
       return '<button type="button" data-v="' + v[0] + '" aria-pressed="' + (v[0] === state.view) + '">' + v[1] + "</button>";
     }).join("");
+  }
+
+  function emptyHtml(text, withSiteLink) {
+    return '<div class="empty"><p>' + A.esc(text) + "</p>" + (withSiteLink ? '<a class="btn outline" href="index.html">SİTEYİ AÇ</a>' : "") + "</div>";
   }
 
   // Usta listesi: her ustanın bugünkü ve yaklaşan randevu sayısı
@@ -149,6 +214,51 @@
     $("people").innerHTML = html;
   }
 
+  // Müşteri listesi: ada göre sıralı, ad ya da telefonla aranabilir
+  function renderCustomers() {
+    if (!state.custAll) {
+      $("people").innerHTML = emptyHtml(state.busy ? "Yükleniyor…" : "Müşteriler yüklenemedi. Sağ üstteki yenile düğmesine basın.");
+      return;
+    }
+    var all = Object.keys(state.custs).map(function (k) { return state.custs[k]; }).filter(Boolean);
+    var q = lower(state.cq).trim(), qd = digitsQuery(state.cq);
+    var items = all.filter(function (c) {
+      return !q || lower(c.name).indexOf(q) >= 0 || (qd.length > 0 && String(c.phone).indexOf(qd) >= 0);
+    }).sort(function (a, b) { return String(a.name).localeCompare(String(b.name), "tr"); });
+    var head = '<p class="count">' + (q ? items.length + " / " : "") + all.length + " müşteri</p>";
+    if (!items.length) {
+      $("people").innerHTML = head + emptyHtml(all.length ? "Aramaya uyan müşteri yok." : "Henüz kayıtlı müşteri yok. İlk randevusunu alan her müşteri buraya eklenir.");
+      return;
+    }
+    $("people").innerHTML = head + '<div class="people">' + items.map(function (c) {
+      var bits = [A.phoneText(c.phone)];
+      if (ageNow(c) !== "") bits.push(ageNow(c) + " yaş");
+      if (genderText(c.gender)) bits.push(genderText(c.gender));
+      return '<a class="person" href="#musteri/' + A.esc(c.phone) + '">' +
+        '<span class="av" aria-hidden="true">' + A.esc(initials(c.name)) + "</span>" +
+        '<span class="txt"><span class="nm">' + A.esc(c.name) + "</span>" +
+        '<span class="sub">' + A.esc(bits.join(" · ")) + "</span></span>" +
+        CHEVRON + "</a>";
+    }).join("") + "</div>";
+  }
+
+  // Seçili müşterinin bilgileri
+  function renderInfo() {
+    var c = custOf(state.cust);
+    if (!c) {
+      $("info").innerHTML = state.busy && c === undefined ? "" : '<p class="note">Bu numaraya ait müşteri kaydı yok; kayıt silinmiş olabilir. Numarayla alınmış randevular aşağıda görünür.</p>';
+      return;
+    }
+    function fact(k, v) { return '<div class="r"><span>' + k + "</span><span>" + v + "</span></div>"; }
+    $("info").innerHTML = '<div class="facts">' +
+      fact("Telefon", '<a href="' + A.esc(A.phoneHref(c.phone)) + '">' + A.esc(A.phoneText(c.phone)) + "</a>") +
+      fact("Yaş", ageNow(c) === "" ? "—" : A.esc(ageNow(c))) +
+      fact("Cinsiyet", A.esc(genderText(c.gender) || "—")) +
+      fact("Kayıt tarihi", A.esc(shortDate(c.created) || "—")) +
+      "</div>" +
+      '<button type="button" class="mini danger" data-del="' + A.esc(c.phone) + '">MÜŞTERİ KAYDINI SİL</button>';
+  }
+
   function dayTitle(key) {
     var prefix = key === dayKey(0) ? "Bugün, " : (key === dayKey(1) ? "Yarın, " : "");
     return prefix + A.longDate(A.fromYmd(key));
@@ -166,6 +276,11 @@
     var staff = a.staff === ANY ? "Personel atanmadı" : a.staff + (a.anyStaff ? " (fark etmez)" : "");
     // Ustanın kendi sayfasında adı zaten başlıkta yazar; satırda yalnız şube kalır.
     var place = state.person ? where + (a.anyStaff && a.staff !== ANY ? " · müşteri usta seçmedi" : "") : staff + " · " + where;
+    var c = custOf(a.phone);
+    if (c && c.first === a.id) place += " · ilk randevusu";
+    var who = A.esc(nameOf(a));
+    // Müşterinin kendi sayfası dışında ad, o sayfaya bağlantıdır.
+    if (!state.cust) who = '<a href="#musteri/' + A.esc(a.phone) + '">' + who + "</a>";
     var acts = "";
     if (st !== "tamam") acts += act("tamam", a.id, "TAMAMLANDI", st === "yeni" ? "ok" : "");
     if (st !== "iptal") acts += act("iptal", a.id, "İPTAL ET");
@@ -175,8 +290,8 @@
     return '<article class="appt ' + st + '">' +
       '<div class="time">' + A.esc(a.time) + "</div>" +
       '<div class="body">' +
-        '<div class="top"><span class="who">' + A.esc(a.name) + '</span><span class="pill ' + st + '">' + STATUS[st] + "</span></div>" +
-        '<a class="tel" href="tel:' + A.esc(String(a.phone || "").replace(/[^\d+]/g, "")) + '">' + A.ICON.phone + A.esc(a.phone) + "</a>" +
+        '<div class="top"><span class="who">' + who + '</span><span class="pill ' + st + '">' + STATUS[st] + "</span></div>" +
+        '<a class="tel" href="' + A.esc(A.phoneHref(a.phone)) + '">' + A.ICON.phone + A.esc(A.phoneText(a.phone)) + "</a>" +
         '<p class="meta">' + A.esc(names) + (a.total ? " · " + A.esc(a.total) : "") + "</p>" +
         '<p class="meta">' + A.esc(place) + "</p>" +
       "</div>" +
@@ -185,15 +300,18 @@
   }
 
   function renderList() {
-    var items = filtered();
+    var mine = !!state.cust;
+    var ready = mine ? state.custFor === state.cust : true;
+    var items = mine ? (ready ? state.custAppts.slice().sort(function (a, b) { return -byTime(a, b); }) : []) : filtered();
+    var head = mine ? '<h2 class="group">RANDEVULARI' + (items.length ? " · " + items.length : "") + "</h2>" : "";
     if (!items.length) {
-      $("list").innerHTML = '<div class="empty"><p>Bu görünümde randevu yok.</p>' +
-        (state.person ? "" : '<a class="btn outline" href="index.html">SİTEYİ AÇ</a>') + "</div>";
+      var text = state.busy || !ready ? "Yükleniyor…" : (mine ? "Bu müşterinin randevusu yok." : "Bu görünümde randevu yok.");
+      $("list").innerHTML = head + emptyHtml(text, !mine && !state.person && !state.busy);
       return;
     }
     var counts = {};
     items.forEach(function (a) { counts[a.date] = (counts[a.date] || 0) + 1; });
-    var html = "", last = "";
+    var html = head, last = "";
     items.forEach(function (a) {
       if (a.date !== last) {
         last = a.date;
@@ -207,18 +325,27 @@
   function render() {
     var detail = !!state.person;
     var people = state.mode === "staff" && !detail;
-    $("who-head").hidden = !detail;
-    $("tiles").hidden = people;
-    $("branches").hidden = detail;
-    $("views").hidden = people;
+    var custList = state.mode === "cust" && !state.cust;
+    var custPage = state.mode === "cust" && !!state.cust;
+    $("who-head").hidden = !(detail || custPage);
+    $("tiles").hidden = people || state.mode === "cust";
+    $("branches").hidden = detail || state.mode === "cust";
+    $("views").hidden = people || state.mode === "cust";
     $("search").hidden = state.mode !== "all";
-    $("people").hidden = !people;
-    $("list").hidden = people;
+    $("csearch").hidden = !custList;
+    $("info").hidden = !custPage;
+    $("people").hidden = !(people || custList);
+    $("list").hidden = people || custList;
     renderModes();
     renderHead();
     renderTiles();
     renderFilters();
-    if (people) renderPeople(); else renderList();
+    if (people) renderPeople();
+    else if (custList) renderCustomers();
+    else {
+      if (custPage) renderInfo();
+      renderList();
+    }
   }
 
   function say(text) {
@@ -233,13 +360,68 @@
     return "İşlem yapılamadı. Bağlantınızı kontrol edip yeniden deneyin.";
   }
 
+  /* ---- Veri yükleme ----
+     Okuma sayısını düşük tutmak için yalnızca gereken yüklenir: önce bugünden sonraki randevular;
+     geçmiş, GEÇMİŞ ya da TÜMÜ açılınca; müşteriler, Müşteriler bölümü açılınca. */
+  function wantsPast() { return state.view === "gecmis" || state.view === "tum"; }
+
+  // Randevularda geçen numaraların müşteri kayıtlarını (adlarını) getirir.
+  function resolveNames(list) {
+    var need = {};
+    list.forEach(function (a) { if (a.phone && !has(state.custs, a.phone)) need[a.phone] = 1; });
+    var keys = Object.keys(need);
+    if (!keys.length) return Promise.resolve();
+    return Store.customersByKeys(keys).then(function (map) {
+      keys.forEach(function (k) { state.custs[k] = map[k] || null; });
+    });
+  }
+
+  function fetchList() {
+    var from = wantsPast() ? dayKey(-PAST_DAYS) : dayKey(0);
+    return Store.list(from).then(function (l) {
+      return resolveNames(l).then(function () {
+        state.list = l;
+        state.from = from;
+        state.listAt = Date.now();
+      });
+    });
+  }
+
+  function fetchCustomers() {
+    return Store.customers().then(function (l) {
+      var map = {};
+      l.forEach(function (c) { map[c.key] = c; });
+      state.custs = map;
+      state.custAll = true;
+    });
+  }
+
+  function fetchCustomer(key) {
+    return Promise.all([Store.customersByKeys([key]), Store.customerAppointments(key)]).then(function (r) {
+      state.custs[key] = r[0][key] || null;
+      state.custAppts = r[1];
+      state.custFor = key;
+    });
+  }
+
+  // Açık görünümün verisi eksik ya da bayat mı?
+  function missing() {
+    if (state.mode === "cust") return state.cust ? state.custFor !== state.cust : !state.custAll;
+    if (!state.from || Date.now() - state.listAt > 60000) return true;
+    return wantsPast() && state.from > dayKey(-PAST_DAYS);
+  }
+
   function load() {
-    return Store.list().then(function (l) {
-      state.list = l;
+    var job = state.mode === "cust" ? (state.cust ? fetchCustomer(state.cust) : fetchCustomers()) : fetchList();
+    state.busy = true;
+    render();
+    return job.then(function () {
+      state.busy = false;
       say("");
       render();
     }, function (err) {
-      say(err && err.code === "permission-denied" ? "Bu hesabın yönetici yetkisi yok." : "Randevular yüklenemedi. Bağlantınızı kontrol edip YENİLE'ye basın.");
+      state.busy = false;
+      say(err && err.code === "permission-denied" ? "Bu hesabın yönetici yetkisi yok." : "Kayıtlar yüklenemedi. Bağlantınızı kontrol edip YENİLE'ye basın.");
       render();
     });
   }
@@ -254,7 +436,6 @@
       $("who").textContent = user && user.email ? user.email : "";
     }
     route();
-    render();
     load();
   }
 
@@ -311,7 +492,14 @@
 
   $("out").addEventListener("click", function () {
     Store.signOut().then(function () {
+      // Çıkışta ekranda ve bellekte kişisel bilgi kalmasın.
       state.list = [];
+      state.from = "";
+      state.custs = {};
+      state.custAll = false;
+      state.custAppts = [];
+      state.custFor = "";
+      render();
       showLogin("");
     });
   });
@@ -323,7 +511,7 @@
   $("modes").addEventListener("click", function (e) {
     var t = e.target.closest("button");
     if (!t) return;
-    var next = t.getAttribute("data-m") === "staff" ? "#ustalar" : "#";
+    var next = { staff: "#ustalar", cust: "#musteriler" }[t.getAttribute("data-m")] || "#";
     if (window.location.hash === next || (next === "#" && !window.location.hash)) return;
     window.location.hash = next;
   });
@@ -331,7 +519,7 @@
   window.addEventListener("hashchange", function () {
     if ($("panel").hidden) return;
     route();
-    render();
+    if (missing()) load(); else render();
     window.scrollTo(0, 0);
   });
 
@@ -346,12 +534,17 @@
     var t = e.target.closest("button");
     if (!t) return;
     state.view = t.getAttribute("data-v");
-    render();
+    if (missing()) load(); else render();
   });
 
   $("q").addEventListener("input", function (e) {
     state.q = e.target.value;
     renderList();
+  });
+
+  $("cq").addEventListener("input", function (e) {
+    state.cq = e.target.value;
+    renderCustomers();
   });
 
   $("list").addEventListener("click", function (e) {
@@ -365,15 +558,35 @@
     } else {
       job = Store.update(id, { status: name });
     }
+    state.listAt = 0; // müşteri sayfasından yapılan değişiklik randevu listesine de yansısın
     job.then(load, function (err) {
-      say(explain(err));
       load().then(function () { say(explain(err)); });
     });
   });
 
-  // Başka sekmede randevu alınırsa ya da sekmeye geri dönülürse listeyi yenile
-  window.addEventListener("storage", function () { if (!$("panel").hidden) load(); });
-  document.addEventListener("visibilitychange", function () { if (!document.hidden && !$("panel").hidden) load(); });
+  // Müşteri kaydını sil
+  $("info").addEventListener("click", function (e) {
+    var t = e.target.closest("[data-del]");
+    if (!t) return;
+    var key = t.getAttribute("data-del");
+    if (!window.confirm("Bu müşterinin kaydı kalıcı olarak silinsin mi?\n\nRandevuları silinmez. Müşteri yeniden randevu alırken baştan kayıt olur.")) return;
+    Store.removeCustomer(key).then(function () {
+      if (state.custAll) delete state.custs[key]; else state.custs[key] = null;
+      window.location.hash = "#musteriler";
+    }, function (err) {
+      say(explain(err));
+    });
+  });
+
+  // Başka sekmede randevu alınırsa ya da panele geri dönülürse kayıtları yenile (yarım dakikada en çok bir kez)
+  var lastAuto = 0;
+  function autoLoad() {
+    if ($("panel").hidden || Date.now() - lastAuto < 30000) return;
+    lastAuto = Date.now();
+    load();
+  }
+  window.addEventListener("storage", autoLoad);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) autoLoad(); });
 
   /* ---- Başlangıç ---- */
   if (!Store.needsLogin) {

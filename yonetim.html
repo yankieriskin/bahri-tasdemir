@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=Jost:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/site.css?v=2">
+<link rel="stylesheet" href="assets/site.css?v=3">
 </head>
 <body>
 <div class="page wide">
@@ -50,16 +50,18 @@
 
   <main class="adm" id="panel" hidden>
     <div class="eyebrow line">YÖNETİM PANELİ</div>
-    <h1 class="h-page">Randevular</h1>
+    <h1 class="h-page" id="title">Randevular</h1>
 
-    <!-- Tüm randevular ya da usta usta görünüm -->
+    <!-- Tüm randevular, usta usta görünüm ya da müşteri kayıtları -->
     <div class="switch" id="modes" role="group" aria-label="Görünüm">
-      <button type="button" data-m="all" aria-pressed="true">TÜM RANDEVULAR</button>
+      <button type="button" data-m="all" aria-pressed="true">RANDEVULAR</button>
       <button type="button" data-m="staff" aria-pressed="false">USTALAR</button>
+      <button type="button" data-m="cust" aria-pressed="false">MÜŞTERİLER</button>
     </div>
 
-    <!-- Bir usta seçildiğinde adı burada görünür -->
+    <!-- Bir usta ya da müşteri seçildiğinde adı burada görünür -->
     <div class="who-head" id="who-head" hidden></div>
+    <div class="cust-info" id="info" hidden></div>
 
     <div class="tiles" id="tiles"></div>
 
@@ -69,6 +71,11 @@
     <div class="field search" id="search">
       <label for="q">AD VEYA TELEFON ARA</label>
       <input id="q" type="search" autocomplete="off" maxlength="40">
+    </div>
+
+    <div class="field search" id="csearch" hidden>
+      <label for="cq">MÜŞTERİ ARA (AD VEYA TELEFON)</label>
+      <input id="cq" type="search" autocomplete="off" maxlength="40">
     </div>
 
     <p class="alert" id="msg" role="alert" hidden></p>
@@ -83,10 +90,10 @@
   </main>
 
 </div>
-<script src="assets/data.js?v=2"></script>
-<script src="assets/app.js?v=2"></script>
+<script src="assets/data.js?v=3"></script>
+<script src="assets/app.js?v=3"></script>
 <script src="assets/config.js"></script>
-<script src="assets/store.js?v=2"></script>
-<script src="assets/yonetim.js?v=2"></script>
+<script src="assets/store.js?v=3"></script>
+<script src="assets/yonetim.js?v=3"></script>
 </body>
 </html>

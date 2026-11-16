@@ -1,10 +1,21 @@
-/* Randevu kaydı.
-   assets/config.js doluysa randevular çevrimiçi veritabanında (Firebase) saklanır;
-   boşsa DEMO modunda yalnızca bu tarayıcıda kalır. İki modun sunduğu işlevler aynıdır:
+/* Randevu ve müşteri kaydı.
+   assets/config.js doluysa kayıtlar çevrimiçi veritabanında (Firebase) saklanır;
+   boşsa DEMO modunda yalnızca bu tarayıcıda kalır. İki modun sunduğu işlevler aynıdır.
+
+   Müşteri, telefon numarasıyla tanınır (numara BTApp.phoneKey ile tek biçime indirilir).
+   İlk randevuda ad, yaş ve cinsiyetle kayıt açılır; sonraki randevularda numara yeter.
+
+     member(phone)        -> bu numara kayıtlı mı (true / false). Ad ya da başka bilgi döndürmez.
      taken(branch, date)  -> o günün dolu saatleri [{time, staff}] (kişisel bilgi içermez)
-     create(appt, cap)    -> yeni randevu; saat doluysa "dolu" hatası verir
-     list()               -> randevular (yalnız yönetici)
+     create(appt, cap, reg) -> yeni randevu; {appt, registered} döner (registered: müşteri kaydı da açıldı mı).
+                             reg = {name, age, gender} verilirse ve numara kayıtlı değilse müşteri kaydı da açılır.
+                             Hatalar: "dolu" (saat dolu), "kayit-gerekli" (numara kayıtlı değil)
+     list(from)           -> from (YYYY-AA-GG) tarihinden sonraki randevular (yalnız yönetici)
      update(id, {status}), remove(id)
+     customers()          -> tüm müşteriler (yalnız yönetici)
+     customersByKeys(keys)-> {numara: müşteri ya da null} (yalnız yönetici)
+     customerAppointments(phone) -> o müşterinin tüm randevuları (yalnız yönetici)
+     removeCustomer(phone)
      user(), signIn(email, pass), signOut(), resetPassword(email) -> yönetici girişi */
 (function () {
   "use strict";
@@ -18,6 +29,7 @@
     return Promise.reject(e);
   }
 
+  function has(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
   function pad(n) { return (n < 10 ? "0" : "") + n; }
 
   function dayKey(offset) {
@@ -30,7 +42,8 @@
   /* DEMO: yalnızca bu tarayıcı                                           */
   /* ------------------------------------------------------------------ */
   function demoStore() {
-    var KEY = "bt_randevular_v1";
+    var KEY = "bt_randevular_v2";
+    var CKEY = "bt_musteriler_v1";
 
     function read() {
       try {
@@ -41,9 +54,18 @@
       }
     }
 
-    function write(list) {
+    function readC() {
       try {
-        window.localStorage.setItem(KEY, JSON.stringify(list));
+        var v = JSON.parse(window.localStorage.getItem(CKEY) || "{}");
+        return v && typeof v === "object" && !Array.isArray(v) ? v : {};
+      } catch (e) {
+        return {};
+      }
+    }
+
+    function save(key, value) {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(value));
         return true;
       } catch (e) {
         return false;
@@ -58,31 +80,64 @@
       mode: "demo",
       needsLogin: false,
 
+      member: function (phone) { return Promise.resolve(has(readC(), phone)); },
+
       taken: function (branch, date) {
         return Promise.resolve(active(read(), branch, date).map(function (a) { return { time: a.time, staff: a.staff }; }));
       },
 
-      create: function (appt, cap) {
+      create: function (appt, cap, reg) {
         var list = read();
         var same = active(list, appt.branch, appt.date).filter(function (a) { return a.time === appt.time; });
         var staffBusy = appt.staff !== ANY && same.some(function (a) { return a.staff === appt.staff; });
         if (staffBusy || same.length >= cap) return fail("dolu");
+        var cs = readC();
+        var registered = false;
+        if (!has(cs, appt.phone)) {
+          if (!reg) return fail("kayit-gerekli");
+          cs[appt.phone] = { key: appt.phone, phone: appt.phone, name: reg.name, age: reg.age, gender: reg.gender, created: new Date().toISOString(), first: appt.id };
+          if (!save(CKEY, cs)) return fail("kayit");
+          registered = true;
+        }
         list.push(appt);
-        return write(list) ? Promise.resolve(appt) : fail("kayit");
+        return save(KEY, list) ? Promise.resolve({ appt: appt, registered: registered }) : fail("kayit");
       },
 
-      list: function () { return Promise.resolve(read()); },
+      list: function (from) {
+        return Promise.resolve(read().filter(function (a) { return !from || a.date >= from; }));
+      },
 
       update: function (id, patch) {
         var list = read();
         list.forEach(function (a) {
           if (a.id === id) Object.keys(patch).forEach(function (k) { a[k] = patch[k]; });
         });
-        return write(list) ? Promise.resolve() : fail("kayit");
+        return save(KEY, list) ? Promise.resolve() : fail("kayit");
       },
 
       remove: function (id) {
-        return write(read().filter(function (a) { return a.id !== id; })) ? Promise.resolve() : fail("kayit");
+        return save(KEY, read().filter(function (a) { return a.id !== id; })) ? Promise.resolve() : fail("kayit");
+      },
+
+      customers: function () {
+        var cs = readC();
+        return Promise.resolve(Object.keys(cs).map(function (k) { return cs[k]; }));
+      },
+
+      customersByKeys: function (keys) {
+        var cs = readC(), out = {};
+        keys.forEach(function (k) { out[k] = has(cs, k) ? cs[k] : null; });
+        return Promise.resolve(out);
+      },
+
+      customerAppointments: function (phone) {
+        return Promise.resolve(read().filter(function (a) { return a.phone === phone; }));
+      },
+
+      removeCustomer: function (phone) {
+        var cs = readC();
+        delete cs[phone];
+        return save(CKEY, cs) ? Promise.resolve() : fail("kayit");
       },
 
       user: function () { return Promise.resolve({ email: "" }); },
@@ -95,7 +150,10 @@
   /* ------------------------------------------------------------------ */
   /* ÇEVRİMİÇİ: Firebase (Firestore + Authentication)                     */
   /*   dolu/{şube_tarih_saat_personel}  -> dolu saatler, herkese açık     */
-  /*   randevular/{id}                  -> ad ve telefon, yalnız yönetici */
+  /*   randevular/{id}                  -> randevu ve telefon, yalnız yönetici */
+  /*   musteriler/{telefon}             -> ad, yaş, cinsiyet; yalnız yönetici  */
+  /*   kayitli/{telefon}                -> "bu numara kayıtlı" işareti; içinde */
+  /*                                       kişisel bilgi yoktur, tek tek sorulabilir */
   /* ------------------------------------------------------------------ */
   function onlineStore() {
     var BASE = "https://www.gstatic.com/firebasejs/10.12.2/";
@@ -133,7 +191,9 @@
     // Yönetici işlemleri: önce giriş bilgisi hazır olsun, sonra veritabanı.
     function adminDb() { return auth().then(function () { return db(); }); }
 
-    function toDoc(a, slot, stamp) {
+    function stamp(v) { return v && v.toDate ? v.toDate().toISOString() : ""; }
+
+    function toDoc(a, slot, now) {
       return {
         branch: a.branch,
         gender: a.gender,
@@ -143,10 +203,9 @@
         anyStaff: !!a.anyStaff,
         date: a.date,
         time: a.time,
-        name: a.name,
         phone: a.phone,
         status: "yeni",
-        created: stamp,
+        created: now,
         slot: slot
       };
     }
@@ -165,12 +224,15 @@
         anyStaff: !!d.anyStaff,
         date: d.date,
         time: d.time,
-        name: d.name,
         phone: d.phone,
         status: d.status,
         slot: d.slot,
-        created: d.created && d.created.toDate ? d.created.toDate().toISOString() : ""
+        created: stamp(d.created)
       };
+    }
+
+    function custFromDoc(id, d) {
+      return { key: id, phone: d.phone || id, name: d.name, age: d.age, gender: d.gender, first: d.first || "", created: stamp(d.created) };
     }
 
     function slotStaff(slot) { return String(slot).split("_").slice(3).join("_"); }
@@ -178,6 +240,12 @@
     return {
       mode: "online",
       needsLogin: true,
+
+      member: function (phone) {
+        return db().then(function (x) {
+          return x.f.getDoc(x.f.doc(x.db, "kayitli", phone));
+        }).then(function (s) { return s.exists(); });
+      },
 
       taken: function (branch, date) {
         return db().then(function (x) {
@@ -191,7 +259,7 @@
         });
       },
 
-      create: function (appt, cap) {
+      create: function (appt, cap, reg) {
         return db().then(function (x) {
           var f = x.f;
           // Personel belliyse tek kilit; "Fark Etmez" ise o saatte boş kalan ilk sıra.
@@ -202,30 +270,45 @@
             keys.push(appt.staff);
           }
 
-          function attempt(i) {
+          // Saat kilidi ve randevu tek işlemde yazılır; ilk randevuda müşteri kaydı da aynı işleme girer.
+          function commit(slot, staffKey, withReg) {
+            var batch = f.writeBatch(x.db);
+            batch.set(f.doc(x.db, "dolu", slot), { branch: appt.branch, date: appt.date, time: appt.time, staff: staffKey, rid: appt.id });
+            batch.set(f.doc(x.db, "randevular", appt.id), toDoc(appt, slot, f.serverTimestamp()));
+            if (withReg) {
+              batch.set(f.doc(x.db, "musteriler", appt.phone), { name: reg.name, phone: appt.phone, age: reg.age, gender: reg.gender, created: f.serverTimestamp(), first: appt.id });
+              batch.set(f.doc(x.db, "kayitli", appt.phone), { v: 1 });
+            }
+            return batch.commit();
+          }
+
+          function attempt(i, withReg) {
             if (i >= keys.length) return fail("dolu");
             var slot = [appt.branch, appt.date, appt.time, keys[i]].join("_");
-            var batch = f.writeBatch(x.db);
-            batch.set(f.doc(x.db, "dolu", slot), { branch: appt.branch, date: appt.date, time: appt.time, staff: keys[i], rid: appt.id });
-            batch.set(f.doc(x.db, "randevular", appt.id), toDoc(appt, slot, f.serverTimestamp()));
-            return batch.commit().then(function () { return appt; }, function (err) {
+            return commit(slot, keys[i], withReg).then(function () { return { appt: appt, registered: withReg }; }, function (err) {
               if (!err || err.code !== "permission-denied") throw err;
-              // Reddedildi: o saat gerçekten dolu mu, yoksa başka bir sorun mu?
+              // Reddedildi: o saat gerçekten dolu mu, yoksa sorun müşteri kaydında mı?
               return f.getDoc(f.doc(x.db, "dolu", slot)).then(function (s) {
-                if (s.exists()) return attempt(i + 1);
-                throw err;
+                if (s.exists()) return attempt(i + 1, withReg);
+                // Kayıt bilgisi gönderilmediyse numara kayıtlı değildir.
+                if (!withReg) return fail("kayit-gerekli");
+                // Kayıt bilgisiyle reddedildiyse numara zaten kayıtlı olabilir: kayıtsız yeniden dene.
+                return attempt(i, false).catch(function (e2) {
+                  if (e2 && e2.code === "kayit-gerekli") throw err;
+                  throw e2;
+                });
               });
             });
           }
 
-          return attempt(0);
+          return attempt(0, !!reg);
         });
       },
 
-      list: function () {
+      list: function (from) {
         return adminDb().then(function (x) {
           var f = x.f;
-          return f.getDocs(f.query(f.collection(x.db, "randevular"), f.where("date", ">=", dayKey(-120))));
+          return f.getDocs(f.query(f.collection(x.db, "randevular"), f.where("date", ">=", from || dayKey(-120))));
         }).then(function (snap) {
           return snap.docs.map(function (d) { return fromDoc(d.id, d.data()); });
         });
@@ -263,6 +346,52 @@
             if (s.exists() && s.data().slot && s.data().status !== "iptal") batch.delete(f.doc(x.db, "dolu", s.data().slot));
             return batch.commit();
           });
+        });
+      },
+
+      customers: function () {
+        return adminDb().then(function (x) {
+          return x.f.getDocs(x.f.collection(x.db, "musteriler"));
+        }).then(function (snap) {
+          return snap.docs.map(function (d) { return custFromDoc(d.id, d.data()); });
+        });
+      },
+
+      // Yalnız istenen numaraların kayıtları; tek sorguda en fazla 30 numara sorulabildiği için parçalara bölünür.
+      customersByKeys: function (keys) {
+        var out = {};
+        keys.forEach(function (k) { out[k] = null; });
+        if (!keys.length) return Promise.resolve(out);
+        return adminDb().then(function (x) {
+          var f = x.f, jobs = [];
+          for (var i = 0; i < keys.length; i += 30) {
+            jobs.push(f.getDocs(f.query(f.collection(x.db, "musteriler"), f.where(f.documentId(), "in", keys.slice(i, i + 30)))));
+          }
+          return Promise.all(jobs);
+        }).then(function (snaps) {
+          snaps.forEach(function (snap) {
+            snap.docs.forEach(function (d) { out[d.id] = custFromDoc(d.id, d.data()); });
+          });
+          return out;
+        });
+      },
+
+      customerAppointments: function (phone) {
+        return adminDb().then(function (x) {
+          var f = x.f;
+          return f.getDocs(f.query(f.collection(x.db, "randevular"), f.where("phone", "==", phone)));
+        }).then(function (snap) {
+          return snap.docs.map(function (d) { return fromDoc(d.id, d.data()); });
+        });
+      },
+
+      // Müşteri kaydını ve "kayıtlı" işaretini siler; randevularına dokunmaz.
+      removeCustomer: function (phone) {
+        return adminDb().then(function (x) {
+          var f = x.f, batch = f.writeBatch(x.db);
+          batch.delete(f.doc(x.db, "musteriler", phone));
+          batch.delete(f.doc(x.db, "kayitli", phone));
+          return batch.commit();
         });
       },
 

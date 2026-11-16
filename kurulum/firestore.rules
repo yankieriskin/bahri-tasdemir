@@ -15,6 +15,8 @@ service cloud.firestore {
     function okDate(v) { return v is string && v.matches('20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]'); }
     function okTime(v) { return v is string && v.matches('[0-2][0-9]:00'); }
     function okText(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+    // Telefon yalnız rakamdır: Türkiye cep numarası başında 0 olmadan 10 hane, yurt dışı ülke koduyla en çok 15 hane.
+    function okPhone(v) { return v is string && v.matches('[0-9]{10,15}'); }
 
     // Dolu saatler. Kişisel bilgi içermez; site boş saatleri göstermek için okur.
     // Belge adı şube_tarih_saat_personel olduğundan aynı kişiye aynı saatte ikinci kayıt açılamaz.
@@ -35,12 +37,12 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Randevular. Ad ve telefon içerir.
+    // Randevular. Telefon içerir; ad müşteri kaydında durur.
     // Herkes yalnızca yeni randevu ekleyebilir; okumak, değiştirmek ve silmek yöneticiye özeldir.
     match /randevular/{rid} {
       allow create: if
-        request.resource.data.keys().hasOnly(['branch', 'gender', 'services', 'total', 'staff', 'anyStaff', 'date', 'time', 'name', 'phone', 'status', 'created', 'slot'])
-        && request.resource.data.keys().hasAll(['branch', 'gender', 'services', 'total', 'staff', 'anyStaff', 'date', 'time', 'name', 'phone', 'status', 'created', 'slot'])
+        request.resource.data.keys().hasOnly(['branch', 'gender', 'services', 'total', 'staff', 'anyStaff', 'date', 'time', 'phone', 'status', 'created', 'slot'])
+        && request.resource.data.keys().hasAll(['branch', 'gender', 'services', 'total', 'staff', 'anyStaff', 'date', 'time', 'phone', 'status', 'created', 'slot'])
         && okText(rid, 6, 40)
         && request.resource.data.branch in ['club', 'luxury']
         && request.resource.data.gender in ['ERKEK', 'KADIN']
@@ -50,15 +52,53 @@ service cloud.firestore {
         && request.resource.data.anyStaff is bool
         && okDate(request.resource.data.date)
         && okTime(request.resource.data.time)
-        && okText(request.resource.data.name, 3, 60)
-        && okText(request.resource.data.phone, 10, 20)
+        && okPhone(request.resource.data.phone)
         && request.resource.data.status == 'yeni'
         && request.resource.data.created == request.time
         && okText(request.resource.data.slot, 10, 120)
         && request.resource.data.slot.matches(request.resource.data.branch + '_' + request.resource.data.date + '_' + request.resource.data.time + '_.{1,70}')
         // Aynı işlemde bu randevuya ait saat kilidi de yazılıyor olmalı.
-        && getAfter(/databases/$(database)/documents/dolu/$(request.resource.data.slot)).data.rid == rid;
+        && getAfter(/databases/$(database)/documents/dolu/$(request.resource.data.slot)).data.rid == rid
+        // Numara kayıtlı bir müşteriye ait olmalı: ya önceden kayıtlıdır ya da kaydı bu işlemde açılıyordur.
+        && existsAfter(/databases/$(database)/documents/musteriler/$(request.resource.data.phone));
       allow read, update, delete: if isAdmin();
+    }
+
+    // Müşteri kayıtları: ad, yaş, cinsiyet. Belge adı telefon numarasıdır.
+    // Kayıt yalnızca ilk randevuyla aynı işlemde açılabilir; sonradan değiştirilemez. Okumak yöneticiye özeldir.
+    match /musteriler/{phone} {
+      allow create: if
+        okPhone(phone)
+        && request.resource.data.keys().hasOnly(['name', 'phone', 'age', 'gender', 'created', 'first'])
+        && request.resource.data.keys().hasAll(['name', 'phone', 'age', 'gender', 'created', 'first'])
+        && request.resource.data.phone == phone
+        && okText(request.resource.data.name, 3, 60)
+        && request.resource.data.age is int
+        && request.resource.data.age >= 1
+        && request.resource.data.age <= 110
+        && request.resource.data.gender in ['K', 'E']
+        && request.resource.data.created == request.time
+        && okText(request.resource.data.first, 6, 40)
+        // "first" bu işlemde açılan (önceden olmayan) ve aynı numaraya ait randevuyu göstermeli.
+        && !exists(/databases/$(database)/documents/randevular/$(request.resource.data.first))
+        && getAfter(/databases/$(database)/documents/randevular/$(request.resource.data.first)).data.phone == phone
+        // "Kayıtlı" işareti de aynı işlemde yazılıyor (ya da önceden duruyor) olmalı.
+        && existsAfter(/databases/$(database)/documents/kayitli/$(phone));
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Kayıtlı numaralar. Yalnızca "bu numara kayıtlı mı" sorusuna yanıt verir; içinde ad ya da başka bilgi yoktur.
+    // Tek tek sorulabilir, toplu listelenemez. İşaret, müşteri kaydıyla aynı işlemde yazılır.
+    match /kayitli/{phone} {
+      allow get: if true;
+      allow list: if false;
+      allow create, update: if
+        request.resource.data.keys().hasOnly(['v'])
+        && request.resource.data.keys().hasAll(['v'])
+        && request.resource.data.v == 1
+        && !exists(/databases/$(database)/documents/musteriler/$(phone))
+        && existsAfter(/databases/$(database)/documents/musteriler/$(phone));
+      allow delete: if isAdmin();
     }
   }
 }

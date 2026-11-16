@@ -567,6 +567,15 @@ button.icon-btn { padding: 0; border: 0; background: transparent; cursor: pointe
   font-size: 17px;
 }
 .field input:focus { outline: 0; border-bottom: 2px solid var(--accent); }
+.field input::placeholder { color: var(--dim); opacity: 1; }
+.field .lab { font-size: 11px; font-weight: 500; letter-spacing: 2px; color: var(--muted); }
+/* İlk randevuda açılan kayıt alanları */
+.fields > .hint, .fields > .note { margin-top: -10px; }
+.signup { display: flex; flex-direction: column; gap: 22px; }
+.signup > .hint { line-height: 1.6; }
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 22px; align-items: end; }
+.step .fields .seg { align-self: flex-start; margin-top: 2px; }
+.note.ok { border-color: var(--accent); color: var(--text); }
 .finish { margin-top: auto; padding: 52px 24px 32px; display: flex; flex-direction: column; gap: 16px; }
 .sum { border: 1px solid var(--line2); padding: 24px 22px; display: flex; flex-direction: column; gap: 12px; }
 .sum .r { display: flex; justify-content: space-between; gap: 16px; font-size: 14px; }
@@ -676,7 +685,8 @@ html[data-theme="panel"] .tabs button[aria-pressed="true"] { color: var(--accent
   margin-top: 22px;
   padding: 4px;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
   gap: 4px;
   background: var(--row);
   border-radius: 14px;
@@ -688,9 +698,10 @@ html[data-theme="panel"] .tabs button[aria-pressed="true"] { color: var(--accent
   border-radius: 10px;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
+  white-space: nowrap;
   cursor: pointer;
 }
 .switch button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(31, 29, 25, 0.1); }
@@ -793,6 +804,25 @@ html[data-theme="panel"] .tabs button[aria-pressed="true"] { color: var(--accent
 .who-head h2 { font-size: 32px; line-height: 1.08; overflow-wrap: anywhere; }
 .who-head .av { width: 54px; height: 54px; background: var(--accent); color: var(--on-accent); font-size: 21px; }
 
+/* Müşteriler: sayı satırı ve seçili müşterinin bilgileri */
+.count { margin-top: 18px; font-size: 13px; color: var(--muted); }
+.count + .people, .count + .empty { margin-top: 8px; }
+.cust-info { margin-top: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.cust-info .note { align-self: stretch; }
+.facts { align-self: stretch; padding: 2px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.facts .r {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+.facts .r:first-child { border-top: 0; }
+.facts .r span:first-child { color: var(--muted); }
+.facts .r span:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+
 /* Randevu kartları */
 .day-head { margin-top: 28px; display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .day-head h2 { font-size: 24px; line-height: 1.15; }
@@ -811,6 +841,8 @@ html[data-theme="panel"] .tabs button[aria-pressed="true"] { color: var(--accent
 .appt .body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .appt .top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .appt .who { font-size: 17px; font-weight: 500; line-height: 1.3; overflow-wrap: anywhere; }
+.appt .who a { color: inherit; }
+.appt .who a:hover { color: var(--accent); }
 .appt .tel { align-self: flex-start; min-height: 32px; display: inline-flex; align-items: center; gap: 8px; font-size: 16px; font-variant-numeric: tabular-nums; }
 .appt .meta { font-size: 14px; line-height: 1.5; color: var(--soft); }
 .appt .acts {

@@ -190,7 +190,72 @@
     renderPicks();
   }
 
-  function showDone(a) {
+  /* ---- Müşteri: bu numara kayıtlı mı? ----
+     Kayıtlıysa yalnızca telefon yeter; değilse (ilk randevu) ad, yaş ve cinsiyet istenir.
+     durum: "none" numara yazılmadı, "wait" soruluyor, "known" kayıtlı, "new" kayıtlı değil, "error" sorulamadı */
+  var member = { key: "", state: "none" };
+  var memberTimer = null;
+  var sex = { value: "", touched: false };
+
+  function paintSex() {
+    Array.prototype.forEach.call($("cins").querySelectorAll("button"), function (bt) {
+      bt.setAttribute("aria-pressed", String(bt.getAttribute("data-x") === sex.value));
+    });
+  }
+
+  function paintMember() {
+    var s = member.state;
+    var note = $("tel-note");
+    note.hidden = s === "known" || s === "new";
+    note.textContent = s === "wait" ? "Numaranız kontrol ediliyor…"
+      : (s === "error" ? "Numaranız şu an kontrol edilemedi; onaylarken yeniden denenecek."
+        : "Daha önce randevu aldıysanız yalnızca telefon numaranızı yazmanız yeterli.");
+    $("known").hidden = s !== "known";
+    $("signup").hidden = s !== "new";
+    // Cinsiyet, elle değiştirilmediyse seçilen bölüme göre gelir.
+    if (!sex.touched) sex.value = gender().key === "kadin" ? "K" : "E";
+    paintSex();
+  }
+
+  function checkMember(key) {
+    member = { key: key, state: "wait" };
+    paintMember();
+    return Store.member(key).then(function (known) {
+      if (member.key === key) {
+        member.state = known ? "known" : "new";
+        paintMember();
+      }
+      return known;
+    }, function (err) {
+      if (member.key === key) {
+        member.state = "error";
+        paintMember();
+      }
+      throw err;
+    });
+  }
+
+  function formError(msg) {
+    var e = new Error(msg);
+    e.code = "form";
+    return e;
+  }
+
+  // İlk randevu: kayıt bilgilerini okur; eksik varsa açıklamasıyla hata verir.
+  function readSignup() {
+    var name = $("ad").value.replace(/\s+/g, " ").trim();
+    var ageText = $("yas").value.trim();
+    var age = /^\d{1,3}$/.test(ageText) ? parseInt(ageText, 10) : 0;
+    if (!name && !ageText) throw formError("İlk randevunuz için kayıt gerekiyor: lütfen adınızı, yaşınızı ve cinsiyetinizi yazın.");
+    if (name.length < 3) throw formError("Lütfen adınızı ve soyadınızı yazın.");
+    if (age < 1 || age > 110) throw formError("Lütfen yaşınızı rakamla yazın.");
+    if (sex.value !== "K" && sex.value !== "E") throw formError("Lütfen cinsiyet seçin.");
+    return { name: name, age: age, gender: sex.value };
+  }
+
+  function showDone(res, reg) {
+    var a = res.appt;
+    var fresh = res.registered && reg;
     $("form").hidden = true;
     $("form").style.display = "none";
     $("done").hidden = false;
@@ -199,24 +264,23 @@
       row("Hizmet", a.services.map(function (s) { return s.name; }).join(", ")) +
       row("Personel", a.staff === ANY ? "Salon planlayacak" : a.staff) +
       row("Tarih", A.longDate(A.fromYmd(a.date)) + ", " + a.time) +
-      row("Ad Soyad", a.name) +
-      row("Telefon", a.phone) +
+      (fresh ? row("Ad Soyad", reg.name) : "") +
+      row("Telefon", A.phoneText(a.phone)) +
       totalHtml(A.totalText(a.services));
-    $("done-note").textContent = Store.mode === "demo"
-      ? "Demo: bu randevu yalnızca bu cihazda kaydedildi, salona ulaşmadı."
-      : "Değişiklik ya da iptal için " + b.phone + " numarasını arayabilirsiniz.";
+    $("done-note").textContent =
+      (fresh ? "Kaydınız oluşturuldu; sonraki randevularınızda yalnızca telefon numaranızı yazmanız yeterli. " : "") +
+      (Store.mode === "demo"
+        ? "Demo: bu randevu yalnızca bu cihazda kaydedildi, salona ulaşmadı."
+        : "Değişiklik ya da iptal için " + b.phone + " numarasını arayabilirsiniz.");
     window.scrollTo(0, 0);
   }
 
   function submit() {
-    var name = $("ad").value.replace(/\s+/g, " ").trim();
-    var phone = $("tel").value.replace(/\s+/g, " ").trim();
-    var digits = phone.replace(/\D/g, "");
+    var key = A.phoneKey($("tel").value);
     var msg = "";
     if (!state.sel.length) msg = "Lütfen en az bir hizmet seçin.";
     else if (!state.time) msg = "Lütfen bir saat seçin.";
-    else if (name.length < 3) msg = "Lütfen adınızı ve soyadınızı yazın.";
-    else if (digits.length < 10 || digits.length > 13) msg = "Lütfen geçerli bir cep telefonu yazın.";
+    else if (!key) msg = "Lütfen cep telefonunuzu yazın. Örnek: 0532 123 45 67";
     if (msg) { showError(msg); return; }
 
     clearError();
@@ -224,8 +288,15 @@
     btn.disabled = true;
     var d = days[state.day];
     var time = state.time;
+    var reg = null;
 
-    Store.taken(id, d.key).then(function (list) {
+    // Numara az önce sorulduysa yanıtı kullan; sorulmadıysa şimdi sor.
+    window.clearTimeout(memberTimer);
+    var settled = member.key === key && (member.state === "known" || member.state === "new");
+    (settled ? Promise.resolve(member.state === "known") : checkMember(key)).then(function (known) {
+      if (!known) reg = readSignup();
+      return Store.taken(id, d.key);
+    }).then(function (list) {
       state.taken = list;
       if (isOff(parseInt(time, 10))) {
         var full = new Error("dolu");
@@ -245,17 +316,22 @@
         anyStaff: state.staff === ANY,
         date: d.key,
         time: time,
-        name: name,
-        phone: phone,
+        phone: key,
         status: "yeni"
-      }, b.staff.length);
-    }).then(showDone, function (err) {
+      }, b.staff.length, reg);
+    }).then(function (res) { showDone(res, reg); }, function (err) {
       btn.disabled = false;
-      if (err && err.code === "dolu") {
+      if (err && err.code === "form") {
+        showError(err.message);
+      } else if (err && err.code === "dolu") {
         state.time = null;
         renderSlots();
         renderSum();
         showError("Bu saat az önce doldu. Lütfen başka bir saat seçin.");
+      } else if (err && err.code === "kayit-gerekli") {
+        member = { key: key, state: "new" };
+        paintMember();
+        showError("Bu numara için kayıt bulunamadı. Lütfen bilgilerinizi yazıp yeniden onaylayın.");
       } else {
         showError("Randevu kaydedilemedi. Lütfen tekrar deneyin ya da salonu arayın: " + b.phone);
       }
@@ -278,6 +354,7 @@
     renderGenders();
     renderCats();
     renderPicks();
+    paintMember();
   });
 
   $("cats").addEventListener("click", function (e) {
@@ -330,6 +407,27 @@
     renderSum();
   });
 
+  // Telefon yazıldıkça: geçerli bir numara olunca kayıtlı mı diye sorulur.
+  $("tel").addEventListener("input", function () {
+    var key = A.phoneKey($("tel").value);
+    if (key === member.key) return;
+    window.clearTimeout(memberTimer);
+    member = { key: "", state: "none" };
+    paintMember();
+    clearError();
+    if (key) memberTimer = window.setTimeout(function () { checkMember(key).catch(function () {}); }, 350);
+  });
+
+  $("cins").addEventListener("click", function (e) {
+    var t = e.target.closest("button");
+    if (!t) return;
+    sex = { value: t.getAttribute("data-x"), touched: true };
+    clearError();
+    paintSex();
+  });
+
+  ["ad", "yas"].forEach(function (i) { $(i).addEventListener("input", clearError); });
+
   $("go").addEventListener("click", submit);
 
   // İlk çizim
@@ -345,5 +443,6 @@
   renderCats();
   renderDays();
   renderPicks();
+  paintMember();
   loadTaken();
 })();

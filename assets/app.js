@@ -20,6 +20,30 @@
     });
   }
 
+  // Telefonu tek biçime indirir; müşteri kaydının anahtarı budur.
+  // "0532 123 45 67", "+90 532 123 45 67", "532 123 45 67" -> "5321234567".
+  // Yurt dışı numarası başında + ile yazılır ve ülke koduyla saklanır. Geçersizse "" döner.
+  function phoneKey(text) {
+    var raw = String(text || "").trim();
+    var d = raw.replace(/\D/g, "");
+    if (d.length === 12 && d.indexOf("90") === 0) d = d.slice(2);
+    else if (d.length === 11 && d.charAt(0) === "0") d = d.slice(1);
+    if (/^5\d{9}$/.test(d)) return d;
+    return raw.charAt(0) === "+" && /^[1-9]\d{10,14}$/.test(d) ? d : "";
+  }
+
+  // "5321234567" -> "0532 123 45 67"
+  function phoneText(key) {
+    var k = String(key || "");
+    if (/^5\d{9}$/.test(k)) return "0" + k.slice(0, 3) + " " + k.slice(3, 6) + " " + k.slice(6, 8) + " " + k.slice(8);
+    return k ? "+" + k : "";
+  }
+
+  function phoneHref(key) {
+    var k = String(key || "");
+    return "tel:+" + (/^5\d{9}$/.test(k) ? "90" : "") + k;
+  }
+
   function nextOpen(b, now) {
     for (var i = 1; i <= 7; i++) {
       var d = (now.getDay() + i) % 7;
@@ -108,6 +132,7 @@
   window.BTApp = {
     DAYS: DAYS, DOW: DOW, MONTHS: MONTHS, MON: MON, ICON: ICON,
     pad: pad, ymd: ymd, fromYmd: fromYmd, longDate: longDate, hourText: hourText, esc: esc,
+    phoneKey: phoneKey, phoneText: phoneText, phoneHref: phoneHref,
     status: status, paintStatus: paintStatus, priceOf: priceOf, totalText: totalText,
     staffFor: staffFor, slotOff: slotOff, assign: assign,
 
