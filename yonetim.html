@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Yönetim paneli | Bahri Taşdemir</title>
+<meta name="theme-color" content="#000000">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" type="image/png" href="assets/img/icon-192.png">
+<link rel="apple-touch-icon" href="assets/img/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&amp;family=Jost:wght@300;400;500;600&amp;display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/site.css">
+</head>
+<body>
+<div class="page wide">
+
+  <header class="topbar">
+    <a class="icon-btn" href="index.html" aria-label="Siteye dön">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <img src="assets/img/logo-header.png" alt="Bahri Taşdemir" width="143" height="40">
+    <span class="icon-btn" aria-hidden="true"></span>
+  </header>
+
+  <p class="demo" id="demo" hidden><b>DEMO</b>Burada yalnızca bu cihazda alınan randevular görünür. Müşterilerin kendi telefonundan aldığı randevuların buraya düşmesi için çevrimiçi veritabanı bağlanmalıdır; yönetici girişi de o zaman eklenir.</p>
+
+  <!-- Yönetici girişi (yalnızca çevrimiçi veritabanı bağlıyken görünür) -->
+  <main class="adm" id="login" hidden>
+    <div class="eyebrow line">YÖNETİM PANELİ</div>
+    <h1 class="h-page">Giriş</h1>
+    <form class="fields" id="login-form" novalidate>
+      <div class="field">
+        <label for="email">E-POSTA</label>
+        <input id="email" type="email" autocomplete="username" maxlength="80">
+      </div>
+      <div class="field">
+        <label for="pass">ŞİFRE</label>
+        <input id="pass" type="password" autocomplete="current-password" maxlength="80">
+      </div>
+      <p class="alert" id="login-err" role="alert" hidden></p>
+      <p class="note" id="login-info" role="status" hidden></p>
+      <button type="submit" class="btn" id="login-go">GİRİŞ YAP</button>
+      <button type="button" class="textbtn" id="forgot">Şifremi unuttum</button>
+    </form>
+  </main>
+
+  <main class="adm" id="panel" hidden>
+    <div class="eyebrow line">YÖNETİM PANELİ</div>
+    <h1 class="h-page">Randevular</h1>
+
+    <div class="tiles" id="tiles"></div>
+
+    <div class="seg" id="branches" role="group" aria-label="Şube"></div>
+    <div class="tabs" id="views" role="group" aria-label="Zaman"></div>
+
+    <div class="field search">
+      <label for="q">AD VEYA TELEFON ARA</label>
+      <input id="q" type="search" autocomplete="off" maxlength="40">
+    </div>
+
+    <p class="alert" id="msg" role="alert" hidden></p>
+    <div id="list" aria-live="polite"></div>
+
+    <div class="account" id="account" hidden>
+      <span id="who"></span>
+      <button type="button" class="mini" id="refresh">YENİLE</button>
+      <button type="button" class="mini" id="out">ÇIKIŞ YAP</button>
+    </div>
+  </main>
+
+</div>
+<script src="assets/data.js"></script>
+<script src="assets/app.js"></script>
+<script src="assets/config.js"></script>
+<script src="assets/store.js"></script>
+<script src="assets/yonetim.js"></script>
+</body>
+</html>

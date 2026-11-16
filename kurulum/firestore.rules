@@ -1,0 +1,64 @@
+rules_version = '2';
+
+// Bahri Taşdemir randevu sitesi – Firestore güvenlik kuralları.
+// Firebase konsolunda: Firestore Database > Rules sekmesine yapıştırılır ve "Publish" denir.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Yönetici: yalnızca aşağıdaki kullanıcı kimlikleri.
+    // Kimlik, Firebase > Authentication > Users tablosundaki "User UID" sütunundadır.
+    // Birden fazla yönetici için: ['UID1', 'UID2']
+    function isAdmin() {
+      return request.auth != null && request.auth.uid in ['mRnOUVTZdtSCpyg9GgM4NF26dhB3'];
+    }
+
+    function okDate(v) { return v is string && v.matches('20[0-9][0-9]-[0-1][0-9]-[0-3][0-9]'); }
+    function okTime(v) { return v is string && v.matches('[0-2][0-9]:00'); }
+    function okText(v, min, max) { return v is string && v.size() >= min && v.size() <= max; }
+
+    // Dolu saatler. Kişisel bilgi içermez; site boş saatleri göstermek için okur.
+    // Belge adı şube_tarih_saat_personel olduğundan aynı kişiye aynı saatte ikinci kayıt açılamaz.
+    match /dolu/{slotId} {
+      allow read: if true;
+      allow create: if isAdmin() || (
+        request.resource.data.keys().hasOnly(['branch', 'date', 'time', 'staff', 'rid'])
+        && request.resource.data.keys().hasAll(['branch', 'date', 'time', 'staff', 'rid'])
+        && request.resource.data.branch in ['club', 'luxury']
+        && okDate(request.resource.data.date)
+        && okTime(request.resource.data.time)
+        && okText(request.resource.data.staff, 1, 60)
+        && okText(request.resource.data.rid, 6, 40)
+        && slotId == request.resource.data.branch + '_' + request.resource.data.date + '_' + request.resource.data.time + '_' + request.resource.data.staff
+        // Aynı işlemde bu saate bağlı bir randevu da yazılıyor olmalı.
+        && getAfter(/databases/$(database)/documents/randevular/$(request.resource.data.rid)).data.slot == slotId
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Randevular. Ad ve telefon içerir.
+    // Herkes yalnızca yeni randevu ekleyebilir; okumak, değiştirmek ve silmek yöneticiye özeldir.
+    match /randevular/{rid} {
+      allow create: if
+        request.resource.data.keys().hasOnly(['branch', 'gender', 'services', 'total', 'staff', 'anyStaff', 'date', 'time', 'name', 'phone', 'status', 'created', 'slot'])
+        && request.resource.data.keys().hasAll(['branch', 'gender', 'services', 'total', 'staff', 'anyStaff', 'date', 'time', 'name', 'phone', 'status', 'created', 'slot'])
+        && okText(rid, 6, 40)
+        && request.resource.data.branch in ['club', 'luxury']
+        && request.resource.data.gender in ['ERKEK', 'KADIN']
+        && okText(request.resource.data.services, 1, 600)
+        && okText(request.resource.data.total, 1, 80)
+        && okText(request.resource.data.staff, 1, 60)
+        && request.resource.data.anyStaff is bool
+        && okDate(request.resource.data.date)
+        && okTime(request.resource.data.time)
+        && okText(request.resource.data.name, 3, 60)
+        && okText(request.resource.data.phone, 10, 20)
+        && request.resource.data.status == 'yeni'
+        && request.resource.data.created == request.time
+        && okText(request.resource.data.slot, 10, 120)
+        && request.resource.data.slot.matches(request.resource.data.branch + '_' + request.resource.data.date + '_' + request.resource.data.time + '_.{1,70}')
+        // Aynı işlemde bu randevuya ait saat kilidi de yazılıyor olmalı.
+        && getAfter(/databases/$(database)/documents/dolu/$(request.resource.data.slot)).data.rid == rid;
+      allow read, update, delete: if isAdmin();
+    }
+  }
+}
