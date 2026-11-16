@@ -75,11 +75,18 @@
   function custOf(phone) { return has(state.custs, phone) ? state.custs[phone] : undefined; }
 
   // Randevuda ad tutulmaz; ad, müşteri kaydından gelir.
+  // Müşteri kaydı eklenmeden önce alınmış eski randevularda ad randevunun içindedir.
   function nameOf(a) {
     var c = custOf(a.phone);
     if (c) return c.name;
+    if (a.name) return a.name;
     return c === null ? "Kaydı silinmiş müşteri" : "…";
   }
+
+  // Tek biçime inmiş numara düzenli yazılır; eski randevulardaki serbest yazılmış numara olduğu gibi gösterilir.
+  function isKey(p) { return /^\d{10,15}$/.test(String(p || "")); }
+  function phoneLabel(p) { return isKey(p) ? A.phoneText(p) : String(p || ""); }
+  function phoneLink(p) { return isKey(p) ? A.phoneHref(p) : "tel:" + String(p || "").replace(/[^\d+]/g, ""); }
 
   function genderText(g) { return g === "K" ? "Kadın" : (g === "E" ? "Erkek" : ""); }
 
@@ -123,7 +130,7 @@
       if (state.view === "yaklasan" && a.date < t) return false;
       if (state.view === "gecmis" && a.date >= t) return false;
       if (!q) return true;
-      return lower(nameOf(a)).indexOf(q) >= 0 || (qd.length > 0 && String(a.phone).indexOf(qd) >= 0);
+      return lower(nameOf(a)).indexOf(q) >= 0 || (qd.length > 0 && digitsOf(a.phone).indexOf(qd) >= 0);
     }).sort(function (a, b) {
       return state.view === "gecmis" ? -byTime(a, b) : byTime(a, b);
     });
@@ -279,8 +286,8 @@
     var c = custOf(a.phone);
     if (c && c.first === a.id) place += " · ilk randevusu";
     var who = A.esc(nameOf(a));
-    // Müşterinin kendi sayfası dışında ad, o sayfaya bağlantıdır.
-    if (!state.cust) who = '<a href="#musteri/' + A.esc(a.phone) + '">' + who + "</a>";
+    // Müşterinin kendi sayfası dışında ad, o sayfaya bağlantıdır (kaydı olan müşteriler için).
+    if (!state.cust && c) who = '<a href="#musteri/' + A.esc(a.phone) + '">' + who + "</a>";
     var acts = "";
     if (st !== "tamam") acts += act("tamam", a.id, "TAMAMLANDI", st === "yeni" ? "ok" : "");
     if (st !== "iptal") acts += act("iptal", a.id, "İPTAL ET");
@@ -291,7 +298,7 @@
       '<div class="time">' + A.esc(a.time) + "</div>" +
       '<div class="body">' +
         '<div class="top"><span class="who">' + who + '</span><span class="pill ' + st + '">' + STATUS[st] + "</span></div>" +
-        '<a class="tel" href="' + A.esc(A.phoneHref(a.phone)) + '">' + A.ICON.phone + A.esc(A.phoneText(a.phone)) + "</a>" +
+        '<a class="tel" href="' + A.esc(phoneLink(a.phone)) + '">' + A.ICON.phone + A.esc(phoneLabel(a.phone)) + "</a>" +
         '<p class="meta">' + A.esc(names) + (a.total ? " · " + A.esc(a.total) : "") + "</p>" +
         '<p class="meta">' + A.esc(place) + "</p>" +
       "</div>" +
@@ -368,7 +375,7 @@
   // Randevularda geçen numaraların müşteri kayıtlarını (adlarını) getirir.
   function resolveNames(list) {
     var need = {};
-    list.forEach(function (a) { if (a.phone && !has(state.custs, a.phone)) need[a.phone] = 1; });
+    list.forEach(function (a) { if (isKey(a.phone) && !has(state.custs, a.phone)) need[a.phone] = 1; });
     var keys = Object.keys(need);
     if (!keys.length) return Promise.resolve();
     return Store.customersByKeys(keys).then(function (map) {

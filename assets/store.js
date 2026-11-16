@@ -193,6 +193,15 @@
 
     function stamp(v) { return v && v.toDate ? v.toDate().toISOString() : ""; }
 
+    // Müşteri kaydı eklenmeden önce alınan randevularda telefon yazıldığı gibi durur ("+90 532 ...").
+    // Tek biçime indirilebiliyorsa indirilir; indirilemiyorsa olduğu gibi bırakılır.
+    function phoneOf(v) {
+      var t = String(v || "");
+      if (/^\d{10,15}$/.test(t)) return t;
+      var A = window.BTApp;
+      return (A && A.phoneKey ? A.phoneKey(t) : "") || t;
+    }
+
     function toDoc(a, slot, now) {
       return {
         branch: a.branch,
@@ -224,7 +233,8 @@
         anyStaff: !!d.anyStaff,
         date: d.date,
         time: d.time,
-        phone: d.phone,
+        phone: phoneOf(d.phone),
+        name: d.name || "", // yalnız eski randevularda dolu; yenilerde ad müşteri kaydındadır
         status: d.status,
         slot: d.slot,
         created: stamp(d.created)
